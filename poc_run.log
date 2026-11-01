@@ -1,0 +1,9 @@
+[+] VULN: Basic auth -> Kafka OAUTHBEARER uses SERVICE token
+    mechanism=OAUTHBEARER
+    token_used='SERVICE_STATIC_TOKEN_DO_NOT_LEAK'
+    plain_username_set_but_ignored='attacker'
+[+] NEGATIVE: Bearer auth -> Kafka uses caller JWT (expected)
+    token_used='USER_JWT_TOKEN'
+[+] NEGATIVE: SCRAM service + Basic -> uses caller plain creds (expected)
+[+] FIX(1aadbea): Basic on OAUTHBEARER rejected: Bearer token required
+ALL CHECKS PASSED

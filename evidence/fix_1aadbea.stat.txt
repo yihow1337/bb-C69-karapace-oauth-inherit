@@ -1,0 +1,67 @@
+commit 1aadbeadba3aab5febdf3677773c33d2f62f91d9
+Author: Dylan Storey <dylanbstorey@users.noreply.github.com>
+Date:   Tue Oct 27 05:29:44 2026 -0400
+
+    Let the REST proxy use the configured OAuth token provider class (#1387)
+    
+    * Let the REST proxy use the configured OAuth token provider class
+    
+    Karapace passes a configured sasl_oauth_token_provider_class to every Kafka
+    client it creates, except the ones the REST proxy creates for itself: its
+    admin client, producers and consumers all take their SASL parameters from
+    get_kafka_client_auth_parameters_from_config, which for OAUTHBEARER asserted
+    on the static sasl_oauth_token and wrapped it in SimpleOauthTokenProvider.
+    A deployment that authenticates with a dynamic provider (AWS MSK IAM, where
+    tokens expire every 15 minutes and must be regenerated) could therefore run
+    the schema registry but not the REST proxy, which failed the assertion at
+    the first Kafka call.
+    
+    Return the configured provider instance when there is one and fall back to
+    the static token otherwise. The parameter type widens to the
+    TokenWithExpiryProvider protocol both providers satisfy, and the assertion
+    message names both ways to configure OAUTHBEARER.
+    
+    Tests: a dynamic provider class is returned as-is in preference to a static
+    token, and OAUTHBEARER with neither configured still fails the assertion.
+    
+    * Type get_oauth_token_provider as TokenWithExpiryProvider | None
+    
+    Fixes the mypy typeddict-item error in
+    kafka_rest_apis/authentication.py when the dynamic provider is placed into
+    SASLOauthParams.
+    
+    * Keep the static OAuth token ahead of the provider class
+    
+    For OAUTHBEARER the REST proxy's clients now use sasl_oauth_token when it
+    is set and fall back to sasl_oauth_token_provider_class only when it is
+    not. Deployments that set both keep the 6.2.4 behaviour; provider-only
+    deployments (AWS MSK IAM) still work.
+    
+    Tests: provider-only returns the provider; with both set, the static
+    token wins.
+    
+    * Never let a per-user REST proxy inherit the service OAuth credentials
+    
+    With rest_authorization=true the per-user config is a copy of the service
+    config, so it carried the service's sasl_oauth_token and the private
+    _sasl_oauth_token_provider instance. A request with a Basic header on an
+    OAUTHBEARER cluster therefore authenticated to Kafka as the service.
+    
+    Clear both on the per-user config, and reject Basic credentials outright
+    when the SASL mechanism is OAUTHBEARER since they cannot be used there.
+    
+    * Address review nits: Bearer challenge on OAUTHBEARER rejection, simpler cast
+    
+    raise_unauthorized() now takes the challenge scheme. Rejecting Basic
+    credentials on an OAUTHBEARER cluster answers with a Bearer challenge and
+    a "Bearer token required" message instead of inviting a Basic retry.
+    
+    get_oauth_token_provider() drops the conditional and casts straight to
+    TokenWithExpiryProvider | None.
+
+ src/karapace/core/kafka_utils.py                  |  6 +-
+ src/karapace/kafka_rest_apis/__init__.py          | 10 +++
+ src/karapace/kafka_rest_apis/authentication.py    | 32 ++++++---
+ tests/unit/kafka_rest_apis/test_authentication.py | 55 ++++++++++++++++
+ tests/unit/test_rest_auth.py                      | 79 ++++++++++++++++++++++-
+ 5 files changed, 170 insertions(+), 12 deletions(-)

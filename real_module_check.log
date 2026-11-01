@@ -1,0 +1,4 @@
+auth={'sasl_mechanism': 'OAUTHBEARER', 'sasl_plain_username': 'attacker', 'sasl_plain_password': 'x'}
+service_token_used=True
+bearer_ok=True
+PASSED
